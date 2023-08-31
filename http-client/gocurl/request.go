@@ -4,6 +4,7 @@ import (
     "bytes"
     "crypto/tls"
     "encoding/json"
+    "errors"
     "fmt"
     "io"
     "net/http"
@@ -20,6 +21,59 @@ type Request struct {
     body                 io.Reader
     subGetFormDataParams string
     cookiesJar           *cookiejar.Jar
+}
+
+// Request send request
+func (r *Request) Request(method, uri string, opts ...Options) (*Response, error) {
+    if len(opts) > 0 {
+        r.opts = mergeDefaultParams(defaultHeader(), opts[0], r.opts)
+    }
+    switch method {
+    case http.MethodGet, http.MethodDelete:
+        uri = r.opts.BaseURI + uri + r.parseGetFormData()
+        req, err := http.NewRequest(method, uri, nil)
+        if err != nil {
+            return nil, err
+        }
+        r.req = req
+    case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodOptions:
+        // parse body
+        r.parseBody()
+        uri = r.opts.BaseURI + uri + r.parseGetFormData()
+        req, err := http.NewRequest(method, uri, r.body)
+        if err != nil {
+            return nil, err
+        }
+        r.req = req
+    default:
+        return nil, errors.New("invalid request method")
+    }
+    r.opts.Headers["Host"] = fmt.Sprintf("%v", r.req.Host)
+
+    // parseTimeout
+    r.parseTimeout()
+
+    // parseClient
+    r.parseClient()
+
+    // parse headers
+    r.parseHeaders()
+
+    // parse cookies
+    r.parseCookies()
+
+    _resp, err := r.cli.Do(r.req)
+    resp := &Response{
+        resp:          _resp,
+        req:           r.req,
+        cookiesJar:    r.cookiesJar,
+        err:           err,
+        setResCharset: r.opts.SetResCharset,
+    }
+    if err != nil {
+        return resp, err
+    }
+    return resp, nil
 }
 
 func (r *Request) parseTimeout() {
