@@ -23,6 +23,36 @@ type Request struct {
     cookiesJar           *cookiejar.Jar
 }
 
+// Get send get request
+func (r *Request) Get(uri string, opts ...Options) (*Response, error) {
+    return r.Request("GET", uri, opts...)
+}
+
+// Post send post request
+func (r *Request) Post(uri string, opts ...Options) (*Response, error) {
+    return r.Request("POST", uri, opts...)
+}
+
+// Put send put request
+func (r *Request) Put(uri string, opts ...Options) (*Response, error) {
+    return r.Request("PUT", uri, opts...)
+}
+
+// Patch send patch request
+func (r *Request) Patch(uri string, opts ...Options) (*Response, error) {
+    return r.Request("PATCH", uri, opts...)
+}
+
+// Delete send delete request
+func (r *Request) Delete(uri string, opts ...Options) (*Response, error) {
+    return r.Request("DELETE", uri, opts...)
+}
+
+// Options send options request
+func (r *Request) Options(uri string, opts ...Options) (*Response, error) {
+    return r.Request("OPTIONS", uri, opts...)
+}
+
 // Request send request
 func (r *Request) Request(method, uri string, opts ...Options) (*Response, error) {
     if len(opts) > 0 {
