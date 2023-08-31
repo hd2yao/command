@@ -1,15 +1,19 @@
 package gocurl
 
 import (
+    "bufio"
     "bytes"
     "crypto/tls"
     "encoding/json"
     "errors"
     "fmt"
+    "github.com/axgle/mahonia"
     "io"
     "net/http"
     "net/http/cookiejar"
     "net/url"
+    "os"
+    "path"
     "strings"
     "time"
 )
@@ -51,6 +55,106 @@ func (r *Request) Delete(uri string, opts ...Options) (*Response, error) {
 // Options send options request
 func (r *Request) Options(uri string, opts ...Options) (*Response, error) {
     return r.Request("OPTIONS", uri, opts...)
+}
+
+// Down method  download files
+func (r *Request) Down(resourceUrl string, savePath, saveName string, opts ...Options) (bool, error) {
+    var vError error
+    var vResponse *Response
+    uri, err := url.ParseRequestURI(resourceUrl)
+    if err != nil {
+        return false, err
+    }
+    if vResponse, vError = r.Request("GET", resourceUrl, opts...); vError == nil {
+        filename := path.Base(uri.Path)
+        if len(saveName) > 0 {
+            filename = saveName
+        }
+        if vResponse.GetStatusCode() == 200 || vResponse.GetContentLength() > 0 {
+            body := vResponse.GetBody()
+            return r.saveFile(body, savePath+filename)
+        } else {
+            return false, errors.New(downloadFileIsEmpty)
+        }
+    }
+    return false, vError
+}
+
+func (r *Request) saveFile(body io.ReadCloser, fileName string) (bool, error) {
+    var isOccurError bool
+    var OccurError error
+    file, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE, 0666)
+    defer func() {
+        _ = body.Close()
+        _ = file.Close()
+    }()
+    reader := bufio.NewReader(body)
+    if err != nil {
+        return false, err
+    }
+    writer := bufio.NewWriter(file)
+    buff := make([]byte, 4096)
+
+    for {
+        currReadSize, readerErr := reader.Read(buff)
+        if currReadSize > 0 {
+            _, OccurError = writer.Write(buff[0:currReadSize])
+            if OccurError != nil {
+                isOccurError = true
+                break
+            }
+        }
+        // 读取结束
+        if readerErr == io.EOF {
+            _ = writer.Flush()
+            break
+        }
+    }
+    // 如果没有发生错误，就返回 true
+    if isOccurError == false {
+        return true, nil
+    } else {
+        return false, OccurError
+    }
+}
+
+// Sse  客户端请求，持续获取服务端推送的数据流
+func (r *Request) Sse(method, uri string, fn func(msgType, content string) bool, options ...Options) (err error) {
+    var tmpOptions = defaultHeader()
+    if len(options) > 0 {
+        tmpOptions = mergeDefaultParams(tmpOptions, options[0])
+    }
+    resp := &Response{}
+    if strings.ToUpper(method) == http.MethodGet {
+        resp, err = r.Get(uri, tmpOptions)
+    } else if strings.ToUpper(method) == http.MethodPost {
+        resp, err = r.Post(uri, tmpOptions)
+    }
+
+    if err == nil {
+        body := resp.GetBody()
+        defer func() {
+            _ = body.Close()
+        }()
+        ioReader := bufio.NewReader(body)
+        for {
+            if bys, err := ioReader.ReadBytes('\n'); err == nil && len(bys) > 4 {
+                delim := []byte{':', ' '}
+                byteSliceSlice := bytes.Split(bys, delim)
+                if len(byteSliceSlice) == 2 {
+                    if !fn(string(byteSliceSlice[0]), string(byteSliceSlice[1])) {
+                        return nil
+                    }
+                }
+            } else {
+                // 如果ioreader关联的缓冲区没有内容，通过休眠3毫秒让出协程（避免死循环导致cpu占用率过高）
+                // 相对网络请求的耗时, 3ms 时间几乎不构成任何影响
+                time.Sleep(time.Millisecond * 3)
+            }
+        }
+    } else {
+        return errors.New(err.Error())
+    }
 }
 
 // Request send request
@@ -234,5 +338,19 @@ func (r *Request) parseGetFormData() string {
         return "?" + r.subGetFormDataParams
     } else {
         return ""
+    }
+}
+
+// SimpleChineseToUtf8 （接受到的）简体中文 转换为 utf-8
+func (r *Request) SimpleChineseToUtf8(vBytes []byte) string {
+    return mahonia.NewDecoder("GB18030").ConvertString(string(vBytes))
+}
+
+// Utf8ToSimpleChinese （一般是go 语言发送的数据）utf-8 转换为  简体中文发出去
+func (r *Request) Utf8ToSimpleChinese(vBytes []byte, charset ...string) string {
+    if len(charset) == 0 {
+        return mahonia.NewEncoder("GB18030").ConvertString(string(vBytes))
+    } else {
+        return mahonia.NewEncoder(charset[0]).ConvertString(string(vBytes))
     }
 }
