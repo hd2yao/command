@@ -1,6 +1,9 @@
 package errors
 
-import "errors"
+import (
+    "errors"
+    "fmt"
+)
 
 func New(text string) error {
     return errors.New(text)
@@ -46,4 +49,23 @@ func wrap(err error, msg string, stackSkip int) error {
     }
 
     return wErr
+}
+
+// Wrap 将上下文信息和堆栈跟踪添加到 err 中，并返回一个带有新上下文的新错误。参数处理与 fmt.Print.Wrap 相同。
+// 使用 Root 恢复由一个或多个 Wrap 调用封装的原始错误
+// 使用 Stack 恢复堆栈跟踪
+// Wrap returns nil if err is nil.
+func Wrap(err error, a ...interface{}) error {
+    if err == nil {
+        return nil
+    }
+    return wrap(err, fmt.Sprint(a...), 1)
+}
+
+// Wrapf 与 Wrap 类型，但参数处理方式与 fmt.Printf 相同。
+func Wrapf(err error, format string, a ...interface{}) error {
+    if err == nil {
+        return nil
+    }
+    return wrap(err, fmt.Sprintf(format, a...), 1)
 }
