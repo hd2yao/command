@@ -3,6 +3,7 @@ package errors
 import (
     "errors"
     "fmt"
+    "strings"
 )
 
 func New(text string) error {
@@ -68,4 +69,40 @@ func Wrapf(err error, format string, a ...interface{}) error {
         return nil
     }
     return wrap(err, fmt.Sprintf(format, a...), 1)
+}
+
+// WithDetail 会返回一个新错误，该错误会将 err 包装为包含文本的链式错误信息作为附加上下文
+// Detail 在调用新错误值时，Detail 将返回给定文本
+func WithDetail(err error, text string) error {
+    if err == nil {
+        return nil
+    }
+    if text == "" {
+        return err
+    }
+    e1 := wrap(err, text, 1).(wrapperError)
+    e1.detail = append(e1.detail, text)
+    return e1
+}
+
+// WithDetailf 与WithDetail 类似，但会像 fmt.Printf 一样格式化详细信息
+// Detail 在调用新错误值时，Detail 将返回格式化后的文本
+func WithDetailf(err error, format string, v ...interface{}) error {
+    if err == nil {
+        return nil
+    }
+    text := fmt.Sprintf(format, v...)
+    e1 := wrap(err, text, 1).(wrapperError)
+    e1.detail = append(e1.detail, text)
+    return e1
+}
+
+// Detail 返回 err 中包含的详细信息
+// 如果错误是由 WithDetail 或 WithDetailf 生成的，则该错误有详细消息
+func Detail(err error) string {
+    wrapper, ok := err.(wrapperError)
+    if !ok {
+        return err.Error()
+    }
+    return strings.Join(wrapper.detail, ";")
 }
