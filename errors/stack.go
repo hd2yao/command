@@ -1,6 +1,9 @@
 package errors
 
-import "fmt"
+import (
+    "fmt"
+    "runtime"
+)
 
 const stackTraceSize = 10
 
@@ -14,4 +17,24 @@ type StackFrame struct {
 // String 满足 fmt.Stringer 接口
 func (f StackFrame) String() string {
     return fmt.Sprintf("%s:%d - %s", f.File, f.Line, f.Func)
+}
+
+func getStack(skip int, size int) []StackFrame {
+    var (
+        pc    = make([]uintptr, size)
+        calls = runtime.Callers(skip+1, pc)
+        trace []StackFrame
+    )
+
+    for i := 0; i < calls; i++ {
+        f := runtime.FuncForPC(pc[i])
+        file, line := f.FileLine(pc[i] - 1)
+        trace = append(trace, StackFrame{
+            Func: f.Name(),
+            File: file,
+            Line: line,
+        })
+    }
+
+    return trace
 }
